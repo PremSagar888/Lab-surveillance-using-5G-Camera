@@ -1,7 +1,7 @@
 // ========== STATE MANAGEMENT ==========
-const serverHost = window.location.hostname || "localhost";
+const serverHost = window.location.hostname || "127.0.0.1";
 // Connect to the local WebSocket server even when dashboard is hosted on GitHub Pages
-const wsHost = (serverHost === "localhost" || serverHost === "127.0.0.1") ? serverHost : "localhost";
+const wsHost = (serverHost === "localhost" || serverHost === "127.0.0.1") ? serverHost : "127.0.0.1";
 let state = {
     connected: false,
     paused: false,
