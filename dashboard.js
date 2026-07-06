@@ -7,6 +7,7 @@ const wsHost = (serverHost === "localhost" || serverHost === "127.0.0.1" || ipPa
 let state = {
     connected: false,
     paused: false,
+    stopped: false,
     websocket: null,
     charts: {},
     reconnectTimer: null,
@@ -128,8 +129,32 @@ function attachEventListeners() {
             state.paused = !state.paused;
             toggleBtn.textContent = state.paused ? 'Resume Live' : 'Pause Live';
             toggleBtn.className = state.paused 
-                ? 'w-full px-4 py-3 bg-[#2ECC71] text-[#0F1115] rounded-lg transition font-bold text-sm'
-                : 'w-full px-4 py-3 bg-[#1A1E23] hover:bg-[#31363F] text-[#F5F5F5] border border-[#31363F] rounded-lg transition font-semibold text-sm';
+                ? 'flex-grow px-4 py-3 bg-[#2ECC71] text-[#0F1115] rounded-lg transition font-bold text-xs whitespace-nowrap'
+                : 'flex-grow px-4 py-3 bg-[#1A1E23] hover:bg-[#31363F] text-[#F5F5F5] border border-[#31363F] rounded-lg transition font-semibold text-xs whitespace-nowrap';
+            
+            if (state.websocket && state.websocket.readyState === WebSocket.OPEN) {
+                state.websocket.send(state.paused ? "PAUSE" : "RESUME");
+            }
+        });
+    }
+
+    // Stop updates/processing
+    const stopBtn = document.getElementById('stop-updates');
+    if (stopBtn) {
+        stopBtn.addEventListener('click', () => {
+            if (confirm("Are you sure you want to stop the live CCTV processing? This will trigger final report generation and end the session.")) {
+                state.stopped = true;
+                if (state.websocket && state.websocket.readyState === WebSocket.OPEN) {
+                    state.websocket.send("STOP");
+                }
+                stopBtn.disabled = true;
+                stopBtn.textContent = "Stopping...";
+                stopBtn.className = "flex-grow px-4 py-3 bg-[#31363F] text-[#A7ADB5] rounded-lg transition font-semibold text-xs whitespace-nowrap cursor-not-allowed";
+                if (toggleBtn) {
+                    toggleBtn.disabled = true;
+                    toggleBtn.className = "flex-grow px-4 py-3 bg-[#31363F] text-[#A7ADB5] rounded-lg transition font-semibold text-xs whitespace-nowrap cursor-not-allowed";
+                }
+            }
         });
     }
 
@@ -357,7 +382,26 @@ function connectWebSocket() {
 
         state.websocket.onmessage = function (event) {
             updateLastPacketInfo(event.data);
-            if (!state.paused) {
+            const data = event.data;
+            const delimiter = data.includes('|') ? '|' : ',';
+            const type = data.split(delimiter)[0];
+            
+            if (type === 'FINISHED' || type === 'FINISHED_DATA') {
+                state.stopped = true;
+                const stopBtn = document.getElementById('stop-updates');
+                const toggleBtn = document.getElementById('toggle-updates');
+                if (stopBtn) {
+                    stopBtn.disabled = true;
+                    stopBtn.textContent = "Stopped";
+                    stopBtn.className = "flex-grow px-4 py-3 bg-[#31363F] text-[#A7ADB5] rounded-lg transition font-semibold text-xs whitespace-nowrap cursor-not-allowed";
+                }
+                if (toggleBtn) {
+                    toggleBtn.disabled = true;
+                    toggleBtn.className = "flex-grow px-4 py-3 bg-[#31363F] text-[#A7ADB5] rounded-lg transition font-semibold text-xs whitespace-nowrap cursor-not-allowed";
+                }
+            }
+
+            if (!state.paused || type === 'FINISHED' || type === 'FINISHED_DATA') {
                 processLiveMessage(event.data);
             }
         };
@@ -382,7 +426,7 @@ function connectWebSocket() {
 }
 
 function scheduleReconnect() {
-    if (state.reconnectTimer || state.connected) return;
+    if (state.reconnectTimer || state.connected || state.stopped) return;
     state.reconnectTimer = setTimeout(() => {
         state.reconnectTimer = null;
         connectWebSocket();
